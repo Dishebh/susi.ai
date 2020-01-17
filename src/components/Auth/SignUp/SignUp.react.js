@@ -102,18 +102,17 @@ class SignUp extends Component {
     }
   };
 
-  isEmailAvailable = () => {
+  isEmailAvailable = async () => {
     const { email, emailErrorMessage } = this.state;
     if (!emailErrorMessage) {
-      getEmailExists({
+      let payload = await getEmailExists({
         email,
-      }).then(payload => {
-        const { exists } = payload;
-        this.setState({
-          emailErrorMessage: exists
-            ? 'Email ID already taken, please use another account'
-            : '',
-        });
+      });
+      const { exists } = payload;
+      this.setState({
+        emailErrorMessage: exists
+          ? 'Email ID already taken, please use another account'
+          : '',
       });
     }
   };
@@ -139,17 +138,21 @@ class SignUp extends Component {
         const password = event.target.value.trim();
         const passwordScore = zxcvbn(password).score;
         const strength = ['Worst', 'Bad', 'Weak', 'Good', 'Strong'];
-        const passwordError = !isPassword(password);
+        const passwordError = isPassword(password);
         const passwordConfirmError =
           (confirmPassword || passwordConfirmErrorMessage) &&
           !(confirmPassword === password);
         this.setState({
           password,
-          passwordErrorMessage: passwordError
-            ? 'Atleast 8 characters, 1 special character, number, 1 capital letter'
-            : '',
-          passwordScore: passwordError ? -1 : passwordScore,
-          passwordStrength: passwordError ? '' : strength[passwordScore],
+          passwordErrorMessage: passwordError.errorStatus ? (
+            <Translate text={passwordError.message} />
+          ) : (
+            ''
+          ),
+          passwordScore: passwordError.errorStatus ? -1 : passwordScore,
+          passwordStrength: passwordError.errorStatus
+            ? ''
+            : strength[passwordScore],
           passwordConfirmErrorMessage: passwordConfirmError
             ? 'Password does not match'
             : '',
@@ -177,12 +180,12 @@ class SignUp extends Component {
     }
   };
 
-  onSignup = event => {
+  onSignup = async event => {
     this.setState({
       signupErrorMessage: '',
     });
 
-    const {
+    let {
       email,
       password,
       emailErrorMessage,
@@ -190,6 +193,8 @@ class SignUp extends Component {
       isCaptchaVerified,
       captchaResponse,
     } = this.state;
+
+    email = email.toLowerCase();
 
     const { getSignup, openSnackBar } = this.props.actions;
 
@@ -199,50 +204,53 @@ class SignUp extends Component {
       isCaptchaVerified
     ) {
       this.setState({ loading: true });
-      getSignup({
-        email,
-        password: encodeURIComponent(password),
-        captchaResponse,
-      })
-        .then(({ payload }) => {
-          if (payload.accepted) {
-            this.setState({
-              password: '',
-              confirmPassword: '',
-              passwordStrength: '',
-              passwordScore: -1,
-              signupErrorMessage: payload.message,
-              success: true,
-              loading: false,
-            });
-          } else {
-            this.setState({
-              password: '',
-              success: false,
-              loading: false,
-            });
-            openSnackBar({
-              snackBarMessage: 'Signup Failed. Try Again',
-            });
-          }
-        })
-        .catch(error => {
+      try {
+        let { payload } = await getSignup({
+          email,
+          password: encodeURIComponent(password),
+          captchaResponse,
+        });
+        if (payload.accepted) {
           this.setState({
-            success: false,
             password: '',
+            confirmPassword: '',
+            passwordStrength: '',
+            passwordScore: -1,
+            signupErrorMessage: payload.message,
+            success: true,
             loading: false,
           });
-          let snackBarMessage;
-          if (error.statusCode === 422) {
-            snackBarMessage =
-              'Already registered. Please signup with a different email account';
-          } else {
-            snackBarMessage = 'Signup Failed. Try Again';
-          }
-          openSnackBar({
-            snackBarMessage,
+          this.props.actions.openModal({
+            modalType: 'login',
+            message: payload.message,
           });
+        } else {
+          this.setState({
+            password: '',
+            success: false,
+            loading: false,
+          });
+          openSnackBar({
+            snackBarMessage: 'Signup Failed. Try Again',
+          });
+        }
+      } catch (error) {
+        this.setState({
+          success: false,
+          password: '',
+          loading: false,
         });
+        let snackBarMessage;
+        if (error.statusCode === 422) {
+          snackBarMessage =
+            'Already registered. Please signup with a different email account';
+        } else {
+          snackBarMessage = 'Signup Failed. Try Again';
+        }
+        openSnackBar({
+          snackBarMessage,
+        });
+      }
     }
   };
 
@@ -285,7 +293,7 @@ class SignUp extends Component {
           <CloseButton onClick={this.handleDialogClose} />
         </DialogTitle>
         <DialogContent>
-          <FormControl error={emailErrorMessage !== ''}>
+          <FormControl error={emailErrorMessage !== ''} disabled={loading}>
             <OutlinedInput
               labelWidth={0}
               name="email"
@@ -300,7 +308,7 @@ class SignUp extends Component {
               {emailErrorMessage}
             </FormHelperText>
           </FormControl>
-          <FormControl error={passwordErrorMessage !== ''}>
+          <FormControl error={passwordErrorMessage !== ''} disabled={loading}>
             <PasswordField
               name="password"
               value={password}
@@ -316,7 +324,10 @@ class SignUp extends Component {
             <PasswordStrengthBar score={passwordScore} />
             <span>{passwordStrength}</span>
           </div>
-          <FormControl error={passwordConfirmErrorMessage !== ''}>
+          <FormControl
+            error={passwordConfirmErrorMessage !== ''}
+            disabled={loading}
+          >
             <PasswordField
               name="confirmPassword"
               value={confirmPassword}

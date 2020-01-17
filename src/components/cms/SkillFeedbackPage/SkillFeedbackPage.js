@@ -11,11 +11,11 @@ import ListItem from '@material-ui/core/ListItem';
 import IconButton from '@material-ui/core/IconButton';
 import Menu from '@material-ui/core/Menu';
 import MenuItem from '@material-ui/core/MenuItem';
-import ListItemIcon from '@material-ui/core/ListItemIcon';
+import ListItemIcon from '../../shared/ListItemIcon';
 import ListItemText from '@material-ui/core/ListItemText';
 import Divider from '@material-ui/core/Divider';
 import CircleImage from '../../shared/CircleImage';
-import Button from '@material-ui/core/Button';
+import Button from '../../shared/Button';
 import FormControl from '@material-ui/core/FormControl';
 import FormHelperText from '@material-ui/core/FormHelperText';
 import MoreVertIcon from '@material-ui/icons/MoreVert';
@@ -24,6 +24,7 @@ import EditBtn from '@material-ui/icons/BorderColor';
 import NavigationChevronRight from '@material-ui/icons/ChevronRight';
 import Emoji from 'react-emoji-render';
 import styled, { css } from 'styled-components';
+import SkillRatingCard from '../SkillRating/SkillRatingCard';
 
 import { parseDate, formatDate } from '../../../utils';
 import getImageSrc from '../../../utils/getImageSrc';
@@ -268,12 +269,11 @@ class SkillFeedbackPage extends Component {
     return range(1, totalPages);
   };
 
-  componentDidMount() {
+  async componentDidMount() {
     const { actions } = this.props;
     actions.getSkillMetaData(this.skillData);
-    actions
-      .getSkillFeedbacks(this.skillData)
-      .then(response => this.setState({ loading: false }));
+    await actions.getSkillFeedbacks(this.skillData);
+    this.setState({ loading: false });
     this.gotoPage(1);
   }
 
@@ -295,9 +295,6 @@ class SkillFeedbackPage extends Component {
       totalRecords: skillFeedbacks,
     };
     this.setState({ currentPage }, () => this.onPageChanged(paginationData));
-    if (this.feedbackRef) {
-      this.feedbackRef.scrollIntoView({ behaviour: 'smooth' });
-    }
   };
 
   handleClick = page => evt => {
@@ -330,14 +327,16 @@ class SkillFeedbackPage extends Component {
     });
   };
 
-  handleEditModal = () => {
-    this.props.actions.openModal({
-      modalType: 'editFeedback',
-      handleConfirm: this.postFeedback,
-      handleClose: this.props.actions.closeModal,
-      errorText: this.state.errorText,
-      feedback: this.state.feedbackValue,
-      handleEditFeedback: this.editFeedback,
+  handleEditModal = previousFeedback => {
+    this.setState({ feedbackValue: previousFeedback }, () => {
+      this.props.actions.openModal({
+        modalType: 'editFeedback',
+        handleConfirm: this.postFeedback,
+        handleClose: this.props.actions.closeModal,
+        errorText: this.state.errorText,
+        feedback: this.state.feedbackValue,
+        handleEditFeedback: this.editFeedback,
+      });
     });
   };
 
@@ -350,7 +349,7 @@ class SkillFeedbackPage extends Component {
     this.setState({ feedbackValue: event.target.value });
   };
 
-  postFeedback = () => {
+  postFeedback = async () => {
     const { group, language, skillTag: skill, actions } = this.props;
     const { feedbackValue } = this.state;
     const skillData = {
@@ -361,29 +360,27 @@ class SkillFeedbackPage extends Component {
       feedback: feedbackValue,
     };
     if (feedbackValue) {
-      actions
-        .setSkillFeedback(skillData)
-        .then(payload => {
-          actions.getSkillFeedbacks(skillData);
-        })
-        .catch(error => {
-          console.log(error);
-        });
+      try {
+        await actions.setSkillFeedback(skillData);
+        actions.getSkillFeedbacks(skillData);
+      } catch (error) {
+        console.log(error);
+      }
       // this.handleEditClose();
     } else {
       this.setState({ errorText: 'Feedback cannot be empty' });
     }
   };
 
-  deleteFeedback = () => {
+  deleteFeedback = async () => {
     const { actions } = this.props;
-    actions
-      .deleteSkillFeedback(this.skillData)
-      .then(payload => {
-        actions.closeModal();
-        actions.getSkillFeedbacks(this.skillData);
-      })
-      .catch(error => console.log(error));
+    try {
+      await actions.deleteSkillFeedback(this.skillData);
+      actions.closeModal();
+      actions.getSkillFeedbacks(this.skillData);
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   handleMenuOpen = event => {
@@ -469,7 +466,11 @@ class SkillFeedbackPage extends Component {
                   open={open}
                   onClose={this.handleMenuClose}
                 >
-                  <MenuItem onClick={this.handleEditModal}>
+                  <MenuItem
+                    onClick={() => {
+                      this.handleEditModal(userFeedback.feedback);
+                    }}
+                  >
                     <ListItemIcon>
                       <EditBtn />
                     </ListItemIcon>
@@ -552,8 +553,8 @@ class SkillFeedbackPage extends Component {
                   label="Post"
                   color="primary"
                   variant="contained"
-                  style={{ margin: 10 }}
                   onClick={this.postFeedback}
+                  style={{ marginBottom: '1em' }}
                 >
                   Post
                 </Button>
@@ -561,10 +562,8 @@ class SkillFeedbackPage extends Component {
             </div>
           </div>
         ) : null}
-        <div ref={el => (this.feedbackRef = el)}>
-          {userFeedbackCard}
-          {feedbackCards}
-        </div>
+        {userFeedbackCard}
+        {feedbackCards}
       </div>
     );
     let renderElement = null;
@@ -613,6 +612,9 @@ class SkillFeedbackPage extends Component {
                 </div>
               </div>
             </SkillDetailContainer>
+          </Paper>
+          <SkillRatingCard />
+          <Paper>
             <Title marginTop>Feedback</Title>
             {feedbackCardsElement}
             {skillFeedbacks &&

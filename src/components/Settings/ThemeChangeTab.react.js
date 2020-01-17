@@ -6,7 +6,7 @@ import Translate from '../Translate/Translate.react';
 import SettingsTabWrapper from './SettingsTabWrapper';
 import Radio from '@material-ui/core/Radio';
 import RadioGroup from '@material-ui/core/RadioGroup';
-import Button from '@material-ui/core/Button';
+import Button from '../shared/Button';
 import CircularProgress from '@material-ui/core/CircularProgress';
 import PropTypes from 'prop-types';
 import FormControlLabel from '@material-ui/core/FormControlLabel';
@@ -27,33 +27,33 @@ class ThemeChangeTab extends React.Component {
     this.props.actions.openModal({ modalType: 'themeChange' });
   };
 
-  handleSubmit = () => {
+  handleSubmit = async () => {
     const { actions, theme, userEmailId } = this.props;
     this.setState({ loading: true });
+    this.initialTheme = theme;
     let payload = {
       theme,
     };
     payload = userEmailId !== '' ? { ...payload, email: userEmailId } : payload;
-    setUserSettings(payload)
-      .then(data => {
-        if (data.accepted) {
-          actions.openSnackBar({
-            snackBarMessage: 'Settings updated',
-          });
-          actions.setUserSettings({ theme });
-          this.setState({ loading: false });
-        } else {
-          actions.openSnackBar({
-            snackBarMessage: 'Failed to save Settings',
-          });
-          this.setState({ loading: false });
-        }
-      })
-      .catch(error => {
+    try {
+      let data = await setUserSettings(payload);
+      if (data.accepted) {
+        actions.openSnackBar({
+          snackBarMessage: 'Settings updated',
+        });
+        actions.setUserSettings({ theme });
+        this.setState({ loading: false });
+      } else {
         actions.openSnackBar({
           snackBarMessage: 'Failed to save Settings',
         });
+        this.setState({ loading: false });
+      }
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: 'Failed to save Settings',
       });
+    }
   };
 
   render() {
@@ -98,7 +98,6 @@ class ThemeChangeTab extends React.Component {
             color="primary"
             onClick={this.handleSubmit}
             disabled={disabled}
-            style={{ width: '10rem' }}
           >
             {loading ? (
               <CircularProgress size={24} />

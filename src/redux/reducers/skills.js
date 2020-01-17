@@ -1,9 +1,10 @@
 import { handleActions } from 'redux-actions';
 import actionTypes from '../actionTypes';
+import storageService from '../../utils/storageService';
 
 let languageArray =
-  localStorage.getItem('languages') !== null
-    ? localStorage.getItem('languages').split(',')
+  storageService.get('languages', 'local') !== null
+    ? storageService.get('languages', 'local').split(',')
     : [];
 
 const defaultState = {
@@ -170,6 +171,7 @@ export default handleActions(
       return {
         ...state,
         filterType,
+        listPage: 1,
         loadingSkills: true,
       };
     },
@@ -178,6 +180,7 @@ export default handleActions(
       return {
         ...state,
         languageValue,
+        listPage: 1,
         loadingSkills: true,
       };
     },
@@ -235,6 +238,7 @@ export default handleActions(
             skill.skillRating &&
             skill.skillRating.stars.avgStar >= ratingRefine,
         ),
+        listPage: 1,
         ratingRefine,
       };
     },

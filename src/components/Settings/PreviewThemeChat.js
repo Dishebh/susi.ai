@@ -42,11 +42,11 @@ const Message = styled.div`
   ${props =>
     props.author === 'SUSI'
       ? css`
-          background-color: #ffffff;
+          background-color: ${props.backgroundColor};
           align-self: flex-start;
         `
       : css`
-          background-color: #e0e0e0;
+          background-color: ${props.backgroundColor};
           align-self: flex-end;
           text-align: left;
         `}
@@ -56,11 +56,11 @@ const ChatContainer = styled.div`
   border: 1px solid #000000;
   overflow-y: auto;
   overflow-x: hidden;
-  background-color: ${props => props.backgroundColor}
+  background-color: ${props => props.$backgroundColor}
     ${props =>
-      props.backgroundImageUrl &&
+      props.$backgroundImageUrl &&
       css`
-        background-image: url(props.backgroundImageUrl);
+        background-image: url(${props.$backgroundImageUrl});
       `};
 `;
 
@@ -70,7 +70,7 @@ const ChatComposerContainer = styled.div`
   padding: 1rem;
   justify-content: space-evenly;
   box-shadow: 0 -1px 4px 0 rgba(0, 0, 0, 0.12);
-  background-color: ${props => props.backgroundColor};
+  background-color: ${props => props.$backgroundColor};
 `;
 
 const TextArea = styled.textarea.attrs({
@@ -81,25 +81,28 @@ const TextArea = styled.textarea.attrs({
   border: none;
   font-size: 0.875rem;
   border-radius: 6px;
-  background-color: ${props => props.backgroundColor};
+  background-color: ${props => props.$backgroundColor};
 `;
 
 const NavBar = styled.div`
   display: flex;
   height: 1.875rem;
   justify-content: space-between;
-  background-color: ${props => props.backgroundColor};
+  background-color: ${props => props.$backgroundColor};
 `;
 
 const ChatWindow = styled.div`
   margin: 0 1.25rem 0 1.25rem;
   min-width: 16rem;
+  background-size: cover;
+  background-repeat: no-repeat;
+
   background-color: ${props =>
-    props.backgroundColor ? props.backgroundColor : 'black'};
+    props.$backgroundColor ? props.$backgroundColor : 'black'};
   ${props =>
-    props.backgroundImageUrl &&
+    props.$backgroundImageUrl &&
     css`
-      background-image: url(props.backgroundImageUrl);
+      background-image: url(${props.$backgroundImageUrl});
     `};
   @media (max-width: 800px) {
     min-width: 12.5rem;
@@ -122,47 +125,46 @@ class PreviewThemeChat extends Component {
     };
   }
 
-  sendMessage = event => {
+  sendMessage = async event => {
     const { messageText } = this.state;
     if (messageText.trim().length > 0) {
       this.addMessage(messageText, 'You');
       const encodedMessage = encodeURIComponent(messageText);
-      getSusiPreviewReply(encodedMessage)
-        .then(payload => {
-          const { messages } = this.state;
-          let index;
-          for (let i = 0; i < messages.length; i++) {
-            if (messages[i].loading === true) {
-              index = i;
-              break;
-            }
+      try {
+        let payload = await getSusiPreviewReply(encodedMessage);
+        const { messages } = this.state;
+        let index;
+        for (let i = 0; i < messages.length; i++) {
+          if (messages[i].loading === true) {
+            index = i;
+            break;
           }
+        }
 
-          let messageObj;
-          if (payload.answers[0]) {
-            messageObj = {
-              messageText: payload.answers[0].actions[0].expression,
-              author: 'SUSI',
-              loading: false,
-            };
-          } else {
-            messageObj = {
-              messageText: 'Sorry, I could not understand what you just said.',
-              author: 'SUSI',
-              loading: false,
-            };
-          }
-          this.setState(prevState => ({
-            messages: [
-              ...prevState.messages.slice(0, index),
-              messageObj,
-              ...prevState.messages.slice(index + 1),
-            ],
-          }));
-        })
-        .catch(error => {
-          console.log('Could not fetch reply');
-        });
+        let messageObj;
+        if (payload.answers[0]) {
+          messageObj = {
+            messageText: payload.answers[0].actions[0].expression,
+            author: 'SUSI',
+            loading: false,
+          };
+        } else {
+          messageObj = {
+            messageText: 'Sorry, I could not understand what you just said.',
+            author: 'SUSI',
+            loading: false,
+          };
+        }
+        this.setState(prevState => ({
+          messages: [
+            ...prevState.messages.slice(0, index),
+            messageObj,
+            ...prevState.messages.slice(index + 1),
+          ],
+        }));
+      } catch (error) {
+        console.log('Could not fetch reply');
+      }
       this.setState({ messageText: '' });
     }
   };
@@ -188,6 +190,8 @@ class PreviewThemeChat extends Component {
   render() {
     const { messages, messageText } = this.state;
     const colors = {
+      susiMessageBackgroundColor: this.props.susiMessageBackgroundColor,
+      userMessageBackgroundColor: this.props.userMessageBackgroundColor,
       headerColor: this.props.header,
       paneColor: this.props.pane,
       bodyColor: this.props.body,
@@ -204,13 +208,21 @@ class PreviewThemeChat extends Component {
       renderMessages = messages.map((messageObj, index) => {
         if (messageObj.author === 'You') {
           return (
-            <Message author={'You'} key={index}>
+            <Message
+              author={'You'}
+              key={index}
+              backgroundColor={colors.userMessageBackgroundColor}
+            >
               {messageObj.messageText}
             </Message>
           );
         }
         return (
-          <Message author={'SUSI'} key={index}>
+          <Message
+            author={'SUSI'}
+            key={index}
+            backgroundColor={colors.susiMessageBackgroundColor}
+          >
             {messageObj.messageText}
           </Message>
         );
@@ -222,21 +234,21 @@ class PreviewThemeChat extends Component {
       <div>
         <h2>Preview</h2>
         <ChatContainer
-          backgroundColor={colors.bodyColor}
-          backgroundImageUrl={backgroundImages.bodyBackgroundImage}
+          $backgroundColor={colors.bodyColor}
+          $backgroundImageUrl={backgroundImages.bodyBackgroundImage}
         >
-          <NavBar backgroundColor={colors.headerColor}>
+          <NavBar $backgroundColor={colors.headerColor}>
             <SusiLogo src={susiWhite} />
             <MoreVertIcon style={{ height: '30px', width: '15px' }} />
           </NavBar>
           <ChatWindow
-            backgroundColor={colors.paneColor}
-            backgroundImageUrl={backgroundImages.messageBackgroundImage}
+            $backgroundColor={colors.paneColor}
+            $backgroundImageUrl={backgroundImages.messageBackgroundImage}
           >
             <ChatMessagesContainer>
               <ChatMessages>{renderMessages}</ChatMessages>
             </ChatMessagesContainer>
-            <ChatComposerContainer backgroundColor={colors.composerColor}>
+            <ChatComposerContainer $backgroundColor={colors.composerColor}>
               <TextArea
                 value={messageText}
                 onChange={ev => this.setState({ messageText: ev.target.value })}
@@ -250,7 +262,7 @@ class PreviewThemeChat extends Component {
                     event.preventDefault();
                   }
                 }}
-                backgroundColor={colors.textareColor}
+                $backgroundColor={colors.textareColor}
               />
               <Send
                 onClick={this.sendMessage}
@@ -273,6 +285,8 @@ PreviewThemeChat.propTypes = {
   button: PropTypes.string,
   messageBackgroundImage: PropTypes.string,
   bodyBackgroundImage: PropTypes.string,
+  userMessageBackgroundColor: PropTypes.string,
+  susiMessageBackgroundColor: PropTypes.string,
 };
 
 export default PreviewThemeChat;

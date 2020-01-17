@@ -28,6 +28,7 @@ import {
   LargeText,
 } from '../../shared/Typography';
 import LineChart from '../../shared/charts/LineChart';
+import getSkillNameFromSkillTag from '../../../utils/getSkillNameFromSkillTag';
 
 const Paper = styled(_Paper)`
   width: 100%;
@@ -96,7 +97,7 @@ class SkillRatingCard extends Component {
     };
   }
 
-  changeRating = userRating => {
+  changeRating = async userRating => {
     const { group, language, skillTag: skill, actions } = this.props;
     const skillData = {
       model: 'general',
@@ -105,23 +106,20 @@ class SkillRatingCard extends Component {
       skill,
       stars: userRating,
     };
-    actions
-      .setUserRating({ userRating: userRating })
-      .then(payload => {
-        actions.openSnackBar({
-          snackBarMessage: 'The skill was successfully rated!',
-          snackBarDuration: 4000,
-        });
-        actions
-          .getSkillRating(skillData)
-          .then(response => {})
-          .catch(error => {
-            console.log(error);
-          });
-      })
-      .catch(error => {
-        console.log(error);
+    try {
+      await actions.setUserRating({ userRating: userRating });
+      actions.openSnackBar({
+        snackBarMessage: 'The skill was successfully rated!',
+        snackBarDuration: 4000,
       });
+      try {
+        await actions.getSkillRating(skillData);
+      } catch (error) {
+        console.log(error);
+      }
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   componentDidMount = () => {
@@ -201,7 +199,10 @@ class SkillRatingCard extends Component {
             <div>
               <SubTitle size="1rem">
                 {' '}
-                Rate your experience with {skillTag} on SUSI.AI{' '}
+                Rate your experience with {getSkillNameFromSkillTag(
+                  skillTag,
+                )}{' '}
+                on SUSI.AI{' '}
               </SubTitle>
               <div
                 style={{

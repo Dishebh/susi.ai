@@ -6,7 +6,7 @@ import SettingsTabWrapper from './SettingsTabWrapper';
 import OutlinedInput from '@material-ui/core/OutlinedInput';
 import FormHelperText from '@material-ui/core/FormHelperText';
 import FormControl from '@material-ui/core/FormControl';
-import Button from '@material-ui/core/Button';
+import Button from '../shared/Button';
 import Select from '../shared/Select';
 import MenuItem from '@material-ui/core/MenuItem';
 import _TimezonePicker from 'react-timezone';
@@ -23,6 +23,10 @@ import { setUserSettings, uploadAvatar, deleteUserAccount } from '../../apis';
 import defaultAvatar from '../../images/defaultAvatar.png';
 import CircularProgress from '@material-ui/core/CircularProgress';
 import isUserName from '../../utils/isUserName';
+import {
+  extractImageFileExtensionFromBase64,
+  base64StringtoFile,
+} from '../../utils/helperFunctions';
 
 const TimezonePicker = styled(_TimezonePicker)`
   & > ul {
@@ -35,7 +39,7 @@ const TimezoneContainer = styled.div`
 `;
 
 const Timezone = styled.div`
-  position: absolute;
+  position: relative;
   z-index: 99;
 `;
 
@@ -169,7 +173,8 @@ class AccountTab extends React.Component {
   };
 
   handleUserName = event => {
-    const { value: userName } = event.target;
+    let { value: userName } = event.target;
+    userName = userName.trim();
     this.setState({ userName });
     if (!isUserName(userName)) {
       this.setState({
@@ -190,24 +195,26 @@ class AccountTab extends React.Component {
     });
   };
 
-  handleAvatarSubmit = () => {
-    const { file } = this.state;
+  handleAvatarSubmit = async () => {
+    const { imageFile } = this.state;
     const { accessToken, actions, userEmailId } = this.props;
+    const fileExt = extractImageFileExtensionFromBase64(imageFile);
+    const fileName = 'image.' + fileExt;
+    const file = base64StringtoFile(imageFile, fileName);
     // eslint-disable-next-line no-undef
     let form = new FormData();
     form.append('access_token', accessToken);
     userEmailId && form.append('email', userEmailId);
     form.append('image', file);
     this.setState({ uploadingAvatar: true });
-    uploadAvatar(form).then(() => {
-      actions.openSnackBar({
-        snackBarMessage: 'Avatar Uploaded',
-      });
-      this.setState({
-        uploadingAvatar: false,
-        isAvatarAdded: true,
-        isAvatarUploaded: true,
-      });
+    await uploadAvatar(form);
+    actions.openSnackBar({
+      snackBarMessage: 'Avatar Uploaded',
+    });
+    this.setState({
+      uploadingAvatar: false,
+      isAvatarAdded: true,
+      isAvatarUploaded: true,
     });
   };
 
@@ -217,16 +224,46 @@ class AccountTab extends React.Component {
     let reader = new FileReader();
     const file = e.target.files[0];
     reader.onloadend = () => {
-      this.setState({
-        file: file,
-        imagePreviewUrl: reader.result,
-        isAvatarAdded: true,
-      });
+      this.setState(
+        {
+          file: file,
+          imagePreviewUrl: reader.result,
+          isAvatarAdded: true,
+        },
+        () => {
+          this.getImageCropModal();
+        },
+      );
     };
     reader.readAsDataURL(file);
     this.handleMenuClose();
   };
 
+  getImageCropModal = () => {
+    const { actions } = this.props;
+    const { imagePreviewUrl } = this.state;
+    actions.openModal({
+      modalType: 'crop',
+      title: 'Crop',
+      imagePreviewUrl: imagePreviewUrl,
+      handleConfirm: this.getCroppedImage,
+      handleClose: actions.closeModal,
+    });
+  };
+
+  getCroppedImage = (croppedImg, img) => {
+    this.setState(
+      {
+        imagePreviewUrl: croppedImg,
+        imageFile: img,
+      },
+      async () => {
+        const { actions } = this.props;
+        await this.handleAvatarSubmit();
+        actions.closeModal();
+      },
+    );
+  };
   removeAvatarImage = () => {
     this.setState({
       file: '',
@@ -248,9 +285,16 @@ class AccountTab extends React.Component {
     });
   };
 
-  handleSubmit = () => {
+  handleSubmit = async () => {
     const { timeZone, prefLanguage, userName, avatarType } = this.state;
     const { actions, userEmailId } = this.props;
+    if (!(userName.trim().length > 0)) {
+      this.setState({
+        userNameError:
+          'A valid username is required before setting timezone or preferred language!',
+      });
+      return;
+    }
     let payload = {
       timeZone,
       prefLanguage,
@@ -259,49 +303,44 @@ class AccountTab extends React.Component {
     };
     payload = userEmailId !== '' ? { ...payload, email: userEmailId } : payload;
     this.setState({ loading: true });
-    setUserSettings(payload)
-      .then(data => {
-        if (data.accepted) {
-          actions.openSnackBar({
-            snackBarMessage: 'Settings updated',
-          });
-          actions
-            .setUserSettings(payload)
-            .then(() => {
-              this.setState({ settingSave: true, loading: false });
-            })
-            .then(() => userEmailId === '' && actions.updateUserAvatar());
-        } else {
-          actions.openSnackBar({
-            snackBarMessage: 'Failed to save Settings',
-          });
-          this.setState({ loading: false });
-        }
-      })
-      .catch(error => {
+    try {
+      let data = await setUserSettings(payload);
+      if (data.accepted) {
+        actions.openSnackBar({
+          snackBarMessage: 'Settings updated',
+        });
+        await actions.setUserSettings(payload);
+        await this.setState({ settingSave: true, loading: false });
+        userEmailId === '' && actions.updateUserAvatar();
+      } else {
         actions.openSnackBar({
           snackBarMessage: 'Failed to save Settings',
         });
+        this.setState({ loading: false });
+      }
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: 'Failed to save Settings',
       });
+    }
   };
 
-  deleteUser = () => {
+  deleteUser = async () => {
     const { deleteUserByAdminEmail: email } = this.state;
-    deleteUserAccount({ email })
-      .then(payload => {
-        this.props.actions.openSnackBar({
-          snackBarMessage: `Account associated with ${email} is deleted successfully!`,
-          snackBarDuration: 2000,
-        });
-        window.location.replace('/admin/users');
-      })
-      .catch(error => {
-        console.log(error);
-        this.props.actions.openSnackBar({
-          snackBarMessage: `Account associated with ${email} cannot be deleted!!`,
-          snackBarDuration: 2000,
-        });
+    try {
+      await deleteUserAccount({ email });
+      this.props.actions.openSnackBar({
+        snackBarMessage: `Account associated with ${email} is deleted successfully!`,
+        snackBarDuration: 2000,
       });
+      window.location.replace('/admin/users');
+    } catch (error) {
+      console.log(error);
+      this.props.actions.openSnackBar({
+        snackBarMessage: `Account associated with ${email} cannot be deleted!!`,
+        snackBarDuration: 2000,
+      });
+    }
   };
 
   handleDelete = deleteUserByAdminEmail => {
@@ -359,7 +398,11 @@ class AccountTab extends React.Component {
             <TabHeading>
               <Translate text="User Name" />
             </TabHeading>
-            <FormControl error={userNameError !== ''}>
+            <FormControl
+              error={userNameError !== ''}
+              style={{ maxWidth: '250px' }}
+              disabled={loading}
+            >
               <OutlinedInput
                 labelWidth={0}
                 name="username"
@@ -388,7 +431,7 @@ class AccountTab extends React.Component {
             </TabHeading>
             <Select
               value={voiceOutput.voiceLang}
-              disabled={!this.TTSBrowserSupport}
+              disabled={!this.TTSBrowserSupport | loading}
               onChange={this.handlePrefLang}
               style={{ margin: '1rem 0' }}
             >
@@ -448,7 +491,7 @@ class AccountTab extends React.Component {
           color="primary"
           onClick={this.handleSubmit}
           disabled={disabled}
-          style={{ margin: '1.5rem 0', width: '10rem' }}
+          style={{ margin: '1.5rem 0' }}
         >
           {loading ? (
             <CircularProgress size={24} />

@@ -3,7 +3,12 @@ import PropTypes from 'prop-types';
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 import CircularProgress from '@material-ui/core/CircularProgress';
-import { Button, OutlinedInput } from '../AuthStyles';
+import {
+  Button,
+  OutlinedInput,
+  StyledLink,
+  LinkContainer,
+} from '../AuthStyles';
 import DialogTitle from '@material-ui/core/DialogTitle';
 import DialogContent from '@material-ui/core/DialogContent';
 import CloseButton from '../../shared/CloseButton';
@@ -52,48 +57,48 @@ class ForgotPassword extends Component {
     });
   };
 
-  handleSubmit = event => {
+  handleSubmit = async event => {
     const { actions } = this.props;
-    const { email, emailErrorMessage } = this.state;
+    let { email, emailErrorMessage } = this.state;
+
+    email = email.toLowerCase();
 
     if (email && !emailErrorMessage) {
       this.setState({ loading: true });
-      actions
-        .getForgotPassword({ email })
-        .then(({ payload }) => {
-          let snackBarMessage = payload.message;
-          let success;
-          if (payload.accepted) {
-            success = true;
-          } else {
-            success = false;
-            snackBarMessage = 'Please Try Again';
-          }
-          this.setState({
-            success,
-            loading: false,
-          });
-          actions.closeModal();
-          actions.openSnackBar({
-            snackBarMessage,
-          });
-        })
-        .catch(error => {
-          actions.closeModal();
-          this.setState({
-            loading: false,
-            success: false,
-          });
-          if (error.statusCode === 422) {
-            actions.openSnackBar({
-              snackBarMessage: 'Email does not exist.',
-            });
-          } else {
-            actions.openSnackBar({
-              snackBarMessage: 'Failed. Try Again',
-            });
-          }
+      try {
+        let { payload } = await actions.getForgotPassword({ email });
+        let snackBarMessage = payload.message;
+        let success;
+        if (payload.accepted) {
+          success = true;
+        } else {
+          success = false;
+          snackBarMessage = 'Please Try Again';
+        }
+        this.setState({
+          success,
+          loading: false,
         });
+        actions.closeModal();
+        actions.openSnackBar({
+          snackBarMessage,
+        });
+      } catch (error) {
+        actions.closeModal();
+        this.setState({
+          loading: false,
+          success: false,
+        });
+        if (error.statusCode === 422) {
+          actions.openSnackBar({
+            snackBarMessage: 'Email does not exist.',
+          });
+        } else {
+          actions.openSnackBar({
+            snackBarMessage: 'Failed. Try Again',
+          });
+        }
+      }
     }
   };
 
@@ -105,6 +110,7 @@ class ForgotPassword extends Component {
 
   render() {
     const { email, emailErrorMessage, loading } = this.state;
+    const { actions } = this.props;
     const isValid = !emailErrorMessage && email;
     return (
       <React.Fragment>
@@ -115,7 +121,7 @@ class ForgotPassword extends Component {
           <CloseButton onClick={this.handleDialogClose} />
         </DialogTitle>
         <DialogContent>
-          <FormControl error={emailErrorMessage !== ''}>
+          <FormControl error={emailErrorMessage !== ''} disabled={loading}>
             <OutlinedInput
               name="email"
               value={email}
@@ -138,6 +144,13 @@ class ForgotPassword extends Component {
           >
             {loading ? <CircularProgress size={24} /> : 'Reset'}
           </Button>
+          <LinkContainer>
+            <StyledLink
+              onClick={() => actions.openModal({ modalType: 'login' })}
+            >
+              <Translate text="Back to Login" />
+            </StyledLink>
+          </LinkContainer>
         </DialogContent>
       </React.Fragment>
     );

@@ -13,6 +13,7 @@ const config = {
   speechPitch: 1,
   ttsLanguage: 'en-US',
   userName: '',
+  userSettingsLoaded: false,
   prefLanguage: 'en-US',
   timeZone: 'UTC-02',
   customThemeValue: {
@@ -22,6 +23,8 @@ const config = {
     composer: '#f3f2f4',
     textarea: '#fff',
     button: '#4285f4',
+    susiMessageBackgroundColor: '#f3f2f4',
+    userMessageBackgroundColor: '#4285f4',
   },
   localStorage: true,
   countryCode: 'US',
@@ -75,7 +78,7 @@ export default handleActions(
         checked = config.checked,
         backgroundImage = config.backgroundImage,
         messageBackgroundImage = config.messageBackgroundImage,
-        avatarType = config.messageBackgroundImage,
+        avatarType = config.avatarType,
       } = settings;
       let { customThemeValue } = settings;
       const themeArray = customThemeValue
@@ -94,6 +97,7 @@ export default handleActions(
         speechPitch: Number(speechPitch),
         ttsLanguage,
         userName,
+        userSettingsLoaded: true,
         prefLanguage,
         timeZone,
         countryCode,
@@ -110,6 +114,8 @@ export default handleActions(
           composer: themeArray[3],
           textarea: themeArray[4],
           button: themeArray[5],
+          susiMessageBackgroundColor: themeArray[6],
+          userMessageBackgroundColor: themeArray[7],
         },
       };
       let userSettingsViewedByAdmin = email

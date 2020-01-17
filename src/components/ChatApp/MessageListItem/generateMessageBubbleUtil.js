@@ -5,6 +5,7 @@ import Emojify from 'react-emojione';
 import TextHighlight from 'react-text-highlight';
 import VoicePlayer from './VoicePlayer';
 import YouTube from 'react-youtube';
+import getCustomThemeColors from '../../../utils/colors';
 import { injectIntl } from 'react-intl';
 import {
   imageParse,
@@ -18,6 +19,14 @@ import {
 import styled, { css } from 'styled-components';
 import MessageBubble from './MessageBubbleStyle';
 import './highlight.css';
+import Modal from '@material-ui/core/Modal';
+import Fade from '@material-ui/core/Fade';
+import ReactPlayer from 'react-player';
+import isMobileView from '../../../utils/isMobileView';
+import AspectRatioIcon from '@material-ui/icons/AspectRatio';
+import ToolTip from '../../shared/ToolTip';
+
+const isMobile = isMobileView(1000);
 
 const DateContainer = styled.section`
   background: #999999;
@@ -33,6 +42,10 @@ const DateContainer = styled.section`
   border-radius: 0.5rem;
   margin: 0 auto;
   text-align: center;
+`;
+
+const Gif = styled.div`
+  overflow: hidden;
 `;
 
 const MessageContainer = styled.div`
@@ -61,6 +74,62 @@ const WebSearchRSSContainer = styled.div`
 `;
 
 const entities = new AllHtmlEntities();
+
+const checkMapAction = (
+  link,
+  userGeoData,
+  allActions,
+  getUserGeoData,
+  action,
+) => {
+  if (link.substring(0, 25) === 'https://www.openstreetmap') {
+    let coordinates = link.substring(38).split('/');
+    let latitude = parseFloat(coordinates[0]);
+    let longitude = parseFloat(coordinates[1]);
+    let zoom = 8;
+    let replacedText, mymap;
+
+    let mapAnchor = null;
+    if (allActions.indexOf('anchor') > -1) {
+      const link = action.link;
+      const text = action.text;
+      mapAnchor = renderAnchor(text, link);
+    }
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      /* Check if user's geo data is available or else perform the action */
+      if (userGeoData === null) {
+        getUserGeoData();
+      } else {
+        /* Manually providing mapanchor and replacedText
+             fields as schema stiching in reducer*/
+        mapAnchor = (
+          <a
+            target="_blank"
+            rel="noopener noreferrer"
+            href={`https://www.openstreetmap.org/#map=13/${userGeoData.lat}/${userGeoData.lon}`}
+          >
+            Here is a map
+          </a>
+        );
+
+        replacedText = 'Your location';
+        mymap = drawMap(userGeoData.lat, userGeoData.lon, zoom);
+      }
+    } else {
+      mymap = drawMap(latitude, longitude, zoom);
+    }
+    return {
+      status: 'true',
+      mymap,
+      mapAnchor,
+      replacedText,
+    };
+  }
+  return {
+    status: 'false',
+  };
+};
 
 const PostDate = injectIntl(({ date, intl }) => (
   <span
@@ -93,22 +162,25 @@ const generateDateBubble = message => {
 const generateGifBubble = (
   action,
   index,
-  gifSource,
   message,
   latestUserMsgID,
   showFeedback,
+  susiMessageBackgroundColor,
 ) => {
   return (
     <MessageContainer key={action + index}>
-      <MessageBubble author={message.authorName}>
-        <div>
+      <MessageBubble
+        author={message.authorName}
+        $backgroundColor={susiMessageBackgroundColor}
+      >
+        <Gif>
           <iframe
-            src={gifSource}
+            src={message.text}
             title="SUSI features GIF"
             frameBorder="0"
             allowFullScreen
           />
-        </div>
+        </Gif>
         {renderMessageFooter(message, latestUserMsgID, showFeedback)}
       </MessageBubble>
     </MessageContainer>
@@ -122,10 +194,14 @@ const generateAnswerBubble = (
   message,
   latestUserMsgID,
   showFeedback,
+  susiMessageBackgroundColor,
 ) => {
   return (
     <MessageContainer key={action + index}>
-      <MessageBubble author={message.authorName}>
+      <MessageBubble
+        author={message.authorName}
+        $backgroundColor={susiMessageBackgroundColor}
+      >
         <div>{replacedText}</div>
         {renderMessageFooter(message, latestUserMsgID, showFeedback)}
       </MessageBubble>
@@ -207,6 +283,9 @@ const generateVideoBubble = (
   showFeedback,
   onYouTubePlayerReady,
   scrollBottom,
+  onClickPopout,
+  showModal,
+  onCloseModal,
 ) => {
   latestMessage && scrollBottom();
   return (
@@ -223,6 +302,37 @@ const generateVideoBubble = (
           }}
           onReady={onYouTubePlayerReady}
         />
+        <ToolTip title="Expand Player">
+          <AspectRatioIcon
+            onClick={onClickPopout}
+            style={{
+              color: '#90a4ae',
+              display: isMobile ? 'none' : 'inline',
+              margin: '5px',
+            }}
+          />
+        </ToolTip>
+
+        <Modal
+          open={showModal}
+          onClose={onCloseModal}
+          style={{
+            width: '800px',
+            height: '540px',
+            margin: '0 auto',
+          }}
+        >
+          <Fade in={showModal}>
+            <ReactPlayer
+              url={'https://www.youtube.com/watch?v=' + identifier}
+              style={{ marginTop: '1rem', marginBottom: '1rem' }}
+              width="100%"
+              height="100%"
+              controls="true"
+              playing
+            />
+          </Fade>
+        </Modal>
         {renderMessageFooter(message, latestUserMsgID, showFeedback)}
       </MessageBubble>
     </MessageContainer>
@@ -283,12 +393,22 @@ export const generateMessageBubble = (
   getUserGeoData,
   pauseAllVideos,
   scrollBottom,
+  onClickPopout,
+  showModal,
+  onCloseModal,
+  customThemeValue,
 ) => {
   if (message && message.type === 'date') {
     return generateDateBubble(message);
   }
-
   const stringWithLinks = message ? message.text : '';
+  const {
+    susiMessageBackgroundColor,
+    userMessageBackgroundColor,
+  } = getCustomThemeColors({
+    theme: 'custom',
+    customThemeValue,
+  });
 
   let replacedText = '';
   let markMsgID = markID;
@@ -352,15 +472,14 @@ export const generateMessageBubble = (
           showFeedback = true;
         }
         if (answer.data[0].type === 'gif') {
-          let gifSource = answer.data[0].embed_url;
           listItems.push(
             generateGifBubble(
               actionType,
               index,
-              gifSource,
               message,
               latestUserMsgID,
               showFeedback,
+              susiMessageBackgroundColor,
             ),
           );
         } else {
@@ -372,26 +491,52 @@ export const generateMessageBubble = (
               message,
               latestUserMsgID,
               showFeedback,
+              susiMessageBackgroundColor,
             ),
           );
         }
         break;
       }
-      case 'anchor': {
-        const { link, text } = action;
-        listItems.push(
-          generateAnchorBubble(
-            actionType,
-            index,
-            text,
+      case 'anchor':
+        {
+          const { link, text } = action;
+          const { status, mymap, mapAnchor, replacedText } = checkMapAction(
             link,
-            message,
-            latestUserMsgID,
-            showFeedback,
-          ),
-        );
+            userGeoData,
+            allActions,
+            getUserGeoData,
+            action,
+          );
+          if (status) {
+            listItems.push(
+              generateMapBubble(
+                actionType,
+                index,
+                replacedText,
+                mapAnchor,
+                mymap,
+                message,
+                latestUserMsgID,
+                showFeedback,
+              ),
+            );
+          } else {
+            listItems.push(
+              generateAnchorBubble(
+                actionType,
+                index,
+                text,
+                link,
+                message,
+                latestUserMsgID,
+                showFeedback,
+              ),
+            );
+          }
+        }
         break;
-      }
+      /* Map case must be reimplemented when the 'map' case is
+       properly handled and set from the backend
       case 'map': {
         let mapAnchor = null;
         if (allActions.indexOf('anchor') > -1) {
@@ -406,12 +551,12 @@ export const generateMessageBubble = (
         zoom = parseFloat(zoom);
         let mymap;
         if (isNaN(latitude) || isNaN(longitude)) {
-          /* Check if user's geo data is available or else perform the action */
+           Check if user's geo data is available or else perform the action
           if (userGeoData === null) {
             getUserGeoData();
           } else {
-            /* Manually providing mapanchor and replacedText
-                 fields as schema stiching in reducer*/
+            // Manually providing mapanchor and replacedText
+            //     fields as schema stiching in reducer
             mapAnchor = (
               <a
                 target="_blank"
@@ -442,6 +587,7 @@ export const generateMessageBubble = (
         );
         break;
       }
+      */
       case 'table': {
         let { columns, count } = action;
         let table = drawTable(columns, answer.data, count);
@@ -472,6 +618,9 @@ export const generateMessageBubble = (
             showFeedback,
             onYouTubePlayerReady,
             scrollBottom,
+            onClickPopout,
+            showModal,
+            onCloseModal,
           ),
         );
         break;
@@ -554,10 +703,16 @@ export const generateMessageBubble = (
       </div>
     );
   }
-
+  const backgroundColor =
+    message.authorName === 'SUSI'
+      ? susiMessageBackgroundColor
+      : userMessageBackgroundColor;
   return (
     <MessageContainer>
-      <MessageBubble author={message.authorName}>
+      <MessageBubble
+        author={message.authorName}
+        $backgroundColor={backgroundColor}
+      >
         <div>{replacedText}</div>
         {renderMessageFooter(message, latestUserMsgID, true)}
       </MessageBubble>

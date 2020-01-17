@@ -1,6 +1,5 @@
 import React from 'react';
 import styled from 'styled-components';
-import { GoogleApiWrapper } from 'google-maps-react';
 import DevicesTable from './DevicesTable';
 import MapContainer from './MapContainer';
 import PropTypes from 'prop-types';
@@ -20,6 +19,7 @@ import Button from '@material-ui/core/Button';
 import _Devices from '@material-ui/icons/Devices';
 import ControlSection from '../../smart-speaker/Control';
 import { withRouter } from 'react-router-dom';
+import withGoogleApiWrapper from '../../../utils/withGoogleApiWrapper';
 
 const Paper = styled(_Paper)`
   width: 100%;
@@ -49,6 +49,18 @@ const Devices = styled(_Devices)`
   margin-right: 5px;
 `;
 
+function renderTooltip(selectedPlace) {
+  return (
+    <p>
+      {`Mac Address: ${selectedPlace.macId}`}
+      <br />
+      {`Room: ${selectedPlace.room}`}
+      <br />
+      {`Device Name: ${selectedPlace.title}`}
+    </p>
+  );
+}
+
 class DeviceSettings extends React.Component {
   static propTypes = {
     google: PropTypes.object,
@@ -62,7 +74,7 @@ class DeviceSettings extends React.Component {
   state = {
     loading: true,
     devicesData: [],
-    invalidLocationDevices: 0,
+    invalidLocations: 0,
     editIdx: null,
     emptyText: 'You do not have any devices connected yet!',
     value: 0,
@@ -83,94 +95,90 @@ class DeviceSettings extends React.Component {
       'My Devices - SUSI.AI - Open Source Artificial Intelligence for Personal Assistants, Robots, Help Desks and Chatbots';
   }
 
-  loadUserDevices = () => {
+  loadUserDevices = async () => {
     const { actions } = this.props;
-    actions
-      .getUserDevices()
-      .then(({ payload }) => {
-        this.initialiseDevices();
-        this.setState({
-          loading: false,
-          emptyText: 'You do not have any devices connected yet!',
-        });
-      })
-      .catch(error => {
-        this.setState({
-          loading: false,
-          emptyText: 'Some error occurred while fetching the devices!',
-        });
-        console.log(error);
+    try {
+      await actions.getUserDevices();
+      this.initialiseDevices();
+      this.setState({
+        loading: false,
+        emptyText: 'You do not have any devices connected yet!',
       });
+    } catch (error) {
+      this.setState({
+        loading: false,
+        emptyText: 'Some error occurred while fetching the devices!',
+      });
+      console.log(error);
+    }
   };
 
-  loadDevices = (email, macId) => {
-    fetchDevices({ search: email })
-      .then(payload => {
-        const { devices } = payload;
-        let devicesData = [];
-        let invalidLocationDevices = 0;
-        devices.forEach(device => {
-          const email = device.name;
-          const devices = device.devices;
-          const macIdArray = Object.keys(devices);
-          macIdArray.forEach(macId => {
-            const device = devices[macId];
-            let deviceName = device.name !== undefined ? device.name : '-';
-            deviceName =
-              deviceName.length > 30
-                ? deviceName.substr(0, 30) + '...'
-                : deviceName;
-            let location = 'Location not given';
-            if (device.geolocation) {
-              location = `${device.geolocation.latitude},${device.geolocation.longitude}`;
-            } else {
-              invalidLocationDevices++;
-            }
-            const deviceObj = {
-              deviceName,
-              macId,
-              email,
-              room: device.room,
-              location,
-              latitude:
-                device.geolocation !== undefined
-                  ? device.geolocation.latitude
-                  : '-',
-              longitude:
-                device.geolocation !== undefined
-                  ? device.geolocation.longitude
-                  : '-',
-            };
-            devicesData.push(deviceObj);
-          });
+  loadDevices = async (email, macId) => {
+    try {
+      let payload = await fetchDevices({ search: email });
+      const { devices } = payload;
+      let devicesData = [];
+      let invalidLocations = 0;
+      devices.forEach(device => {
+        const email = device.name;
+        const devices = device.devices;
+        const macIdArray = Object.keys(devices);
+        macIdArray.forEach(macId => {
+          const device = devices[macId];
+          let deviceName = device.name !== undefined ? device.name : '-';
+          deviceName =
+            deviceName.length > 30
+              ? deviceName.substr(0, 30) + '...'
+              : deviceName;
+          let location = 'Location not given';
+          if (device.geolocation) {
+            location = `${device.geolocation.latitude},${device.geolocation.longitude}`;
+          } else {
+            invalidLocations++;
+          }
+          const deviceObj = {
+            deviceName,
+            macId,
+            email,
+            room: device.room,
+            location,
+            latitude:
+              device.geolocation !== undefined
+                ? device.geolocation.latitude
+                : '-',
+            longitude:
+              device.geolocation !== undefined
+                ? device.geolocation.longitude
+                : '-',
+          };
+          devicesData.push(deviceObj);
         });
-        this.setState({
-          devicesData,
-          invalidLocationDevices,
-          loading: false,
-          macId,
-          value: macId ? macId : 0,
-          email,
-        });
-      })
-      .catch(error => {
-        console.log(error);
       });
+      this.setState({
+        devicesData,
+        invalidLocations,
+        loading: false,
+        macId,
+        value: macId ? macId : 0,
+        email,
+      });
+    } catch (error) {
+      console.log(error);
+    }
   };
 
-  handleRemoveDevice = rowIndex => {
+  handleRemoveDevice = async rowIndex => {
     const data = this.state.devicesData;
     const { email } = this.state;
-    removeUserDevice({ macId: data[rowIndex].macId, email })
-      .then(payload => {
-        this.setState({
-          devicesData: data.filter((row, index) => index !== rowIndex),
-        });
-        this.props.actions.closeModal();
-      })
-      .catch(error => {
-        console.log(error);
+    try {
+      await removeUserDevice({ macId: data[rowIndex].macId, email });
+      this.setState({
+        devicesData: data.filter((row, index) => index !== rowIndex),
       });
+      this.props.actions.closeModal();
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   startEditing = rowIndex => {
@@ -196,30 +204,30 @@ class DeviceSettings extends React.Component {
     });
   };
 
-  handleDeviceSave = rowIndex => {
+  handleDeviceSave = async rowIndex => {
     this.setState({
       editIdx: -1,
     });
     const deviceData = this.state.devicesData[rowIndex];
 
-    addUserDevice({ ...deviceData })
-      .then(payload => {})
-      .catch(error => {
-        console.log(error);
-      });
+    try {
+      await addUserDevice({ ...deviceData });
+    } catch (error) {
+      console.log(error);
+    }
   };
 
-  handleEditByAdmin = rowIndex => {
+  handleEditByAdmin = async rowIndex => {
     this.setState({
       editIdx: -1,
     });
     const deviceData = this.state.devicesData[rowIndex];
     const { email, deviceName, macId, room } = deviceData;
-    modifyUserDevices({ email, name: deviceName, macid: macId, room })
-      .then(payload => {})
-      .catch(error => {
-        console.log(error);
-      });
+    try {
+      await modifyUserDevices({ email, name: deviceName, macid: macId, room });
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   handleView = rowIndex => {
@@ -235,7 +243,7 @@ class DeviceSettings extends React.Component {
     if (devices) {
       let devicesData = [];
       let deviceIds = Object.keys(devices);
-      let invalidLocationDevices = 0;
+      let invalidLocations = 0;
 
       deviceIds.forEach(eachDevice => {
         const {
@@ -258,7 +266,7 @@ class DeviceSettings extends React.Component {
           deviceObj.longitude === 'Longitude not available.'
         ) {
           deviceObj.location = 'Not found';
-          invalidLocationDevices++;
+          invalidLocations++;
         } else {
           deviceObj.latitude = parseFloat(latitude);
           deviceObj.longitude = parseFloat(longitude);
@@ -268,7 +276,7 @@ class DeviceSettings extends React.Component {
 
       this.setState({
         devicesData,
-        invalidLocationDevices,
+        invalidLocations,
       });
     }
   };
@@ -292,7 +300,7 @@ class DeviceSettings extends React.Component {
   };
 
   renderDevicesInfo = () => {
-    const { devicesData, invalidLocationDevices, editIdx, email } = this.state;
+    const { devicesData, invalidLocations, editIdx, email } = this.state;
     const { google, mapKey } = this.props;
     return (
       <div>
@@ -324,14 +332,15 @@ class DeviceSettings extends React.Component {
           <div style={{ maxHeight: '300px', marginTop: '10px' }}>
             {mapKey && (
               <MapContainer
+                tooltipRenderer={renderTooltip}
                 google={google}
-                devicesData={devicesData}
-                invalidLocationDevices={invalidLocationDevices}
+                data={devicesData}
+                invalidLocations={invalidLocations}
               />
             )}
           </div>
 
-          {invalidLocationDevices ? (
+          {invalidLocations ? (
             <div style={{ marginTop: '10px' }}>
               <b>NOTE: </b>Location info of one or more devices could not be
               retrieved.
@@ -388,10 +397,5 @@ export default withRouter(
   connect(
     mapStateToProps,
     mapDispatchToProps,
-  )(
-    GoogleApiWrapper(props => ({
-      LoadingContainer: LoadingContainer,
-      apiKey: props.mapKey,
-    }))(DeviceSettings),
-  ),
+  )(withGoogleApiWrapper(DeviceSettings)),
 );

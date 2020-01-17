@@ -3,7 +3,7 @@ import { withRouter } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { connect } from 'react-redux';
 import _Toolbar from '@material-ui/core/Toolbar';
-import ListItemIcon from '@material-ui/core/ListItemIcon';
+import ListItemIcon from '../shared/ListItemIcon';
 import ListItemText from '@material-ui/core/ListItemText';
 import OutlinedInput from '@material-ui/core/OutlinedInput';
 import Select from '@material-ui/core/Select';
@@ -19,10 +19,11 @@ import uiActions from '../../redux/actions/ui';
 import skillsAction from '../../redux/actions/skills';
 import skillAction from '../../redux/actions/skill';
 import Link from '../shared/Link';
+import storageService from '../../utils/storageService';
 import Settings from '@material-ui/icons/Settings';
 import Exit from '@material-ui/icons/ExitToApp';
 import Dashboard from '@material-ui/icons/Dashboard';
-import _Add from '@material-ui/icons/Add';
+import Add from '@material-ui/icons/Add';
 import Polymer from '@material-ui/icons/Polymer';
 import BotIcon from '@material-ui/icons/PersonPin';
 import DeviceIcon from '@material-ui/icons/Devices';
@@ -48,6 +49,9 @@ import SearchIcon from '@material-ui/icons/Search';
 import CloseIcon from '@material-ui/icons/Close';
 import Divider from '@material-ui/core/Divider';
 import isMobileView from '../../utils/isMobileView';
+import ToolTip from '../shared/ToolTip';
+import Devices from '@material-ui/icons/Devices';
+import Person from '@material-ui/icons/Person';
 
 const LanguageSelect = styled(Select)`
   ${OutlinedSelectStyles}
@@ -57,10 +61,12 @@ const LanguageSelect = styled(Select)`
     width: 6rem;
   }
   .MuiOutlinedInput-input {
-    padding: 4px;
+    padding-right: 1.6rem;
   }
-  .MuiInputBase-inputSelect {
-    margin-right: 1.5rem;
+  @media (max-width: 430px) {
+    .MuiOutlinedInput-input {
+      padding-right: 2rem;
+    }
   }
 `;
 
@@ -126,11 +132,6 @@ const Toolbar = styled(_Toolbar)`
   align-items: center;
 `;
 
-const Add = styled(_Add)`
-  color: #ffffff;
-  margin-top: 5px;
-`;
-
 const HideOnScroll = ({ children }) => {
   const trigger = useScrollTrigger();
   return (
@@ -161,6 +162,7 @@ class NavigationBar extends Component {
     accessToken: PropTypes.string,
     email: PropTypes.string,
     userName: PropTypes.string,
+    userSettingsLoaded: PropTypes.bool,
     app: PropTypes.string,
     actions: PropTypes.object,
     avatarImgThumbnail: PropTypes.string,
@@ -214,30 +216,31 @@ class NavigationBar extends Component {
     actions.openModal({ modalType: 'login' });
   };
 
-  handleSearchTypeChange = e => {
+  handleSearchTypeChange = async e => {
     const { actions, searchQuery } = this.props;
     const { value: searchType } = e.target;
-    actions.setSearchFilter({ searchType }).then(() => {
-      this.setState({
-        searchSelectWidth: this.getSelectMenuWidth(searchType),
-      });
-      if (searchQuery !== '') {
-        this.loadCards();
-      }
+    if (searchType.length === 0) {
+      searchType.push('skill_name');
+    }
+    await actions.setSearchFilter({ searchType });
+    this.setState({
+      searchSelectWidth: this.getSelectMenuWidth(searchType),
     });
+    if (searchQuery !== '') {
+      this.loadCards();
+    }
   };
 
-  handleSearch = value => {
+  handleSearch = async value => {
     if (typeof value !== 'string') {
       value = '';
     }
     value = value.trim();
-    this.props.actions.setSearchFilter({ searchQuery: value }).then(() => {
-      this.loadCards();
-      if (value !== '') {
-        this.props.history.push('/');
-      }
-    });
+    await this.props.actions.setSearchFilter({ searchQuery: value });
+    this.loadCards();
+    if (value !== '') {
+      this.props.history.push('/');
+    }
   };
 
   componentDidMount() {
@@ -326,20 +329,23 @@ class NavigationBar extends Component {
     ));
   };
 
-  handleLanguageChange = (event, index, values) => {
-    localStorage.setItem('languages', event.target.value);
-    this.props.actions
-      .setLanguageFilter({ languageValue: event.target.value })
-      .then(() => {
-        if (
-          this.props.routeType ||
-          ['category', 'language'].includes(window.location.href.split('/')[4])
-        ) {
-          this.loadCards();
-        } else {
-          this.loadMetricsSkills();
-        }
-      });
+  handleLanguageChange = async (event, index, values) => {
+    storageService.set('languages', event.target.value, 'local');
+    let languages = event.target.value;
+    if (languages.length === 0) {
+      languages.push('en');
+    }
+    await this.props.actions.setLanguageFilter({
+      languageValue: languages,
+    });
+    if (
+      this.props.routeType ||
+      ['category', 'language'].includes(window.location.href.split('/')[4])
+    ) {
+      this.loadCards();
+    } else {
+      this.loadMetricsSkills();
+    }
   };
 
   loadMetricsSkills = () => {
@@ -355,12 +361,31 @@ class NavigationBar extends Component {
     }));
   };
 
+  onLogout = () => {
+    const { actions } = this.props;
+    actions.openModal({
+      modalType: 'confirm',
+      title: 'Logout',
+      handleConfirm: this.handleLogOut,
+      confirmText: 'Logout',
+      handleClose: actions.closeModal,
+      content: <p>Are you sure you want to log out ?</p>,
+    });
+  };
+
+  handleLogOut = () => {
+    const { actions, history } = this.props;
+    history.push('/logout');
+    actions.closeModal();
+  };
+
   render() {
     const {
       accessToken,
       isAdmin,
       email,
       userName,
+      userSettingsLoaded,
       avatarImgThumbnail,
       history,
       searchState,
@@ -440,19 +465,16 @@ class NavigationBar extends Component {
             </MenuItem>
           </Link>
         ) : null}
-        <Link to="/logout">
-          <MenuItem>
-            <ListItemIcon>
-              <Exit />
-            </ListItemIcon>
-            <ListItemText>
-              <Translate text="Logout" />
-            </ListItemText>
-          </MenuItem>
-        </Link>
+        <MenuItem onClick={this.onLogout}>
+          <ListItemIcon>
+            <Exit />
+          </ListItemIcon>
+          <ListItemText>
+            <Translate text="Logout" />
+          </ListItemText>
+        </MenuItem>
       </React.Fragment>
     );
-
     let userAvatar = null;
     if (accessToken) {
       userAvatar = avatarImgThumbnail;
@@ -582,10 +604,16 @@ class NavigationBar extends Component {
                             src={userAvatar}
                             size="32"
                           />
-                          <UserDetail>
-                            {!userName ? email : userName}
-                          </UserDetail>
-                          <ExpandMore />
+                          {userSettingsLoaded && (
+                            <UserDetail>
+                              {!userName ? email : userName}
+                            </UserDetail>
+                          )}
+                          <ExpandMore
+                            style={{
+                              display: isMobileView(400) ? 'none' : 'inline',
+                            }}
+                          />
                         </FlexContainer>
                       </div>
                     </StyledIconButton>
@@ -604,6 +632,9 @@ class NavigationBar extends Component {
                           <Paper>
                             <Link to="/skillWizard">
                               <MenuItem>
+                                <ListItemIcon>
+                                  <Add />
+                                </ListItemIcon>
                                 <ListItemText>
                                   <Translate text="Create Skill" />
                                 </ListItemText>
@@ -611,6 +642,9 @@ class NavigationBar extends Component {
                             </Link>
                             <Link to="/botWizard">
                               <MenuItem>
+                                <ListItemIcon>
+                                  <Person />
+                                </ListItemIcon>
                                 <ListItemText>
                                   <Translate text="Create Bot" />
                                 </ListItemText>
@@ -618,6 +652,9 @@ class NavigationBar extends Component {
                             </Link>
                             <Link to="/mydevices">
                               <MenuItem>
+                                <ListItemIcon>
+                                  <Devices />
+                                </ListItemIcon>
                                 <ListItemText>
                                   <Translate text="Add Device" />
                                 </ListItemText>
@@ -626,19 +663,28 @@ class NavigationBar extends Component {
                           </Paper>
                         </Popper>
                         {isMobileView(400) ? (
-                          <Add />
+                          <Add
+                            style={{
+                              marginLeft: '5px',
+                              color: '#fff',
+                            }}
+                          />
                         ) : (
-                          <CreateDetail>Create</CreateDetail>
+                          <CreateDetail style={{ marginLeft: '20px' }}>
+                            Create
+                          </CreateDetail>
                         )}
                       </div>
                     </StyledIconButton>
-                    <IconButton
-                      color="inherit"
-                      onClick={() => history.push('/dashboard')}
-                      style={{ padding: '7px' }}
-                    >
-                      <Dashboard />
-                    </IconButton>
+                    <ToolTip title="Dashboard">
+                      <IconButton
+                        color="inherit"
+                        onClick={() => history.push('/dashboard')}
+                        style={{ padding: '7px' }}
+                      >
+                        <Dashboard />
+                      </IconButton>
+                    </ToolTip>
                   </React.Fragment>
                 )}
                 {accessToken ? null : (
@@ -648,15 +694,18 @@ class NavigationBar extends Component {
                     </ListItemText>
                   </MenuItem>
                 )}
-                <IconButton
-                  color="inherit"
-                  onClick={
-                    isMobileView(500) ? this.openFullScreen : this.openPreview
-                  }
-                  style={{ padding: '7px' }}
-                >
-                  <Chat />
-                </IconButton>
+                <ToolTip title="Chat with Susi AI">
+                  <IconButton
+                    color="inherit"
+                    onClick={
+                      isMobileView(500) ? this.openFullScreen : this.openPreview
+                    }
+                    style={{ padding: '7px' }}
+                  >
+                    <Chat />
+                  </IconButton>
+                </ToolTip>
+
                 <div data-tip="custom" data-for={'right-menu-about'}>
                   <Popper
                     id={'right-menu-about'}
@@ -687,8 +736,8 @@ class NavigationBar extends Component {
                       aria-haspopup="true"
                       style={{
                         color: 'white',
-                        paddingRight: '15px',
-                        paddingLeft: '7px',
+                        marginRight: '10px',
+                        padding: '7px',
                       }}
                     >
                       <ContactSupportIcon />
@@ -706,11 +755,12 @@ class NavigationBar extends Component {
 
 function mapStateToProps(store) {
   const { email, accessToken, isAdmin, avatarImgThumbnail } = store.app;
-  const { userName } = store.settings;
+  const { userName, userSettingsLoaded } = store.settings;
   return {
     email,
     accessToken,
     userName,
+    userSettingsLoaded,
     isAdmin,
     avatarImgThumbnail,
     ...store.skills,

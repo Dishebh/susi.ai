@@ -13,7 +13,7 @@ import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 import { TabHeading } from './SettingStyles';
 import countryData from 'country-data';
-import Button from '@material-ui/core/Button';
+import Button from '../shared/Button';
 import settingActions from '../../redux/actions/settings';
 import uiActions from '../../redux/actions/ui';
 import MenuItem from '@material-ui/core/MenuItem';
@@ -98,7 +98,7 @@ class MobileTab extends React.Component {
     });
   };
 
-  handleSubmit = () => {
+  handleSubmit = async () => {
     const { actions, userEmailId } = this.props;
     const { phoneNo, countryCode, countryDialCode } = this.state;
     let payload = {
@@ -108,26 +108,25 @@ class MobileTab extends React.Component {
     };
     payload = userEmailId !== '' ? { ...payload, email: userEmailId } : payload;
     this.setState({ loading: true });
-    setUserSettings(payload)
-      .then(data => {
-        if (data.accepted) {
-          actions.openSnackBar({
-            snackBarMessage: 'Settings updated',
-          });
-          actions.setUserSettings(payload);
-          this.setState({ loading: false });
-        } else {
-          actions.openSnackBar({
-            snackBarMessage: 'Failed to save Settings',
-          });
-          this.setState({ loading: false });
-        }
-      })
-      .catch(error => {
+    try {
+      let data = await setUserSettings(payload);
+      if (data.accepted) {
+        actions.openSnackBar({
+          snackBarMessage: 'Settings updated',
+        });
+        actions.setUserSettings(payload);
+        this.setState({ loading: false });
+      } else {
         actions.openSnackBar({
           snackBarMessage: 'Failed to save Settings',
         });
+        this.setState({ loading: false });
+      }
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: 'Failed to save Settings',
       });
+    }
   };
 
   render() {
@@ -189,7 +188,7 @@ class MobileTab extends React.Component {
               />
             </PhoneCode>
             <Number>
-              <FormControl error={phoneNoError !== ''}>
+              <FormControl error={phoneNoError !== ''} disabled={loading}>
                 <InputLabel>Phone Number</InputLabel>
                 <Input
                   value={phoneNo}
@@ -208,7 +207,6 @@ class MobileTab extends React.Component {
           color="primary"
           onClick={this.handleSubmit}
           disabled={disabled}
-          style={{ width: '10rem' }}
         >
           {loading ? (
             <CircularProgress size={24} />

@@ -4,7 +4,7 @@ import MenuItem from '@material-ui/core/MenuItem';
 import PropTypes from 'prop-types';
 import React, { Component } from 'react';
 import _MenuList from '@material-ui/core/MenuList';
-import ListItemIcon from '@material-ui/core/ListItemIcon';
+import ListItemIcon from '../shared/ListItemIcon';
 import ListItemText from '@material-ui/core/ListItemText';
 import Paper from '@material-ui/core/Paper';
 import ShareOnSocialMedia from './ShareOnSocialMedia';
@@ -49,6 +49,7 @@ const settingsOptions = [
 const Container = styled.div`
   width: 100%;
   min-height: calc(100vh - 48px);
+  overflow: scroll;
   margin-top: 2rem;
   background: ${props => (props.theme === 'dark' ? '#000012' : '#f2f2f2')};
   @media only screen and (max-width: 1060px) {
@@ -161,20 +162,18 @@ class Settings extends Component {
     };
   }
 
-  componentDidMount() {
+  async componentDidMount() {
     const { actions, theme } = this.props;
     const parameters = new URL(window.location).searchParams;
     const email = parameters.get('email');
     if (email) {
-      actions.getUserSettings({ email }).then(({ payload }) => {
-        const { settings } = payload;
-        const { theme } = settings;
-        this.setState({ loading: false, theme });
-      });
+      let { payload } = await actions.getUserSettings({ email });
+      const { settings } = payload;
+      const { theme } = settings;
+      this.setState({ loading: false, theme });
     } else {
-      actions.getUserSettings().then(({ payload }) => {
-        this.setState({ loading: false, theme });
-      });
+      await actions.getUserSettings();
+      this.setState({ loading: false, theme });
     }
     document.title =
       'Settings - SUSI.AI - Open Source Artificial Intelligence for Personal Assistants, Robots, Help Desks and Chatbots';
@@ -286,7 +285,7 @@ class Settings extends Component {
             onChange={this.loadSettings}
             value={selectedSetting}
             style={{ width: '100%' }}
-            autoWidth={false}
+            autowidth="false"
           >
             {this.generateDropDownMenu()}
           </Select>

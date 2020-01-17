@@ -6,7 +6,6 @@ import styled from 'styled-components';
 import Button from '@material-ui/core/Button';
 import uiActions from '../../../../redux/actions/ui';
 import { fetchApiKeys, deleteApiKey } from '../../../../apis/index';
-import { ActionSpan, ActionSeparator } from '../../../shared/TableActionStyles';
 import MaterialTable from 'material-table';
 import TABLE_CONFIG from './table-config';
 
@@ -28,14 +27,16 @@ class ConfigKeys extends React.Component {
     this.props.actions.closeModal();
   };
 
-  confirmDelete = () => {
+  confirmDelete = async () => {
     const { apiType } = this.props;
     const { keyName } = this.state;
-    deleteApiKey({ keyName, apiType })
-      .then(() => this.fetchApiKeys({ apiType }))
-      .catch(error => {
-        console.log(error);
-      });
+    try {
+      await deleteApiKey({ keyName, apiType });
+      this.fetchApiKeys({ apiType });
+    } catch (error) {
+      console.log(error);
+    }
+
     this.props.actions.closeModal();
   };
 
@@ -78,26 +79,25 @@ class ConfigKeys extends React.Component {
     this.fetchApiKeys({ apiType });
   }
 
-  fetchApiKeys = ({ apiType }) => {
-    fetchApiKeys({ apiType })
-      .then(payload => {
-        let apiKeys = [];
-        let keys = Object.keys(payload.keys);
-        keys.forEach(j => {
-          const apiKey = {
-            keyName: j,
-            value: payload.keys[j].value,
-          };
-          apiKeys.push(apiKey);
-        });
-        this.setState({
-          apiKeys: apiKeys,
-          loading: false,
-        });
-      })
-      .catch(error => {
-        console.log(error);
+  fetchApiKeys = async ({ apiType }) => {
+    try {
+      let payload = await fetchApiKeys({ apiType });
+      let apiKeys = [];
+      let keys = Object.keys(payload.keys);
+      keys.forEach(j => {
+        const apiKey = {
+          keyName: j,
+          value: payload.keys[j].value,
+        };
+        apiKeys.push(apiKey);
       });
+      this.setState({
+        apiKeys: apiKeys,
+        loading: false,
+      });
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   render() {
@@ -118,31 +118,17 @@ class ConfigKeys extends React.Component {
           }}
           actions={[
             {
-              onEdit: (event, rowData) => {
-                this.handleUpdate(rowData.keyName, rowData.value);
-              },
-              onDelete: (event, rowData) => {
-                this.handleDelete(rowData.keyName);
-              },
+              icon: 'update',
+              tooltip: 'Update Key',
+              onClick: (event, rowData) =>
+                this.handleUpdate(rowData.keyName, rowData.value),
+            },
+            {
+              icon: 'delete',
+              tooltip: 'Delete Key',
+              onClick: (event, rowData) => this.handleDelete(rowData.keyName),
             },
           ]}
-          components={{
-            Action: props => (
-              <React.Fragment>
-                <ActionSpan
-                  onClick={event => props.action.onEdit(event, props.data)}
-                >
-                  Edit
-                </ActionSpan>
-                <ActionSeparator> | </ActionSeparator>
-                <ActionSpan
-                  onClick={event => props.action.onDelete(event, props.data)}
-                >
-                  Delete
-                </ActionSpan>
-              </React.Fragment>
-            ),
-          }}
         ></MaterialTable>
         <AddConfigButton
           variant="contained"

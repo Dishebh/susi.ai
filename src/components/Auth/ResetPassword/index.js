@@ -35,22 +35,21 @@ class ResetPassword extends Component {
     };
     this.token = this.props.location.search.split('=')[1] || '';
   }
-  componentDidMount() {
+  async componentDidMount() {
     const { actions } = this.props;
-    checkResetPasswordToken({ token: this.token })
-      .then(({ message }) => {
-        actions.openSnackBar({
-          snackBarMessage: message,
-          snackBarDuration: 4000,
-        });
-      })
-      .catch(error => {
-        actions.openSnackBar({
-          snackBarMessage: 'Invalid request!',
-          snackBarDuration: 4000,
-        });
-        this.setState({ invalidToken: true });
+    try {
+      let { message } = await checkResetPasswordToken({ token: this.token });
+      actions.openSnackBar({
+        snackBarMessage: message,
+        snackBarDuration: 4000,
       });
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: 'Invalid request!',
+        snackBarDuration: 4000,
+      });
+      this.setState({ invalidToken: true });
+    }
   }
 
   componentWillUnmount() {
@@ -65,11 +64,11 @@ class ResetPassword extends Component {
           newPasswordConfirmErrorMessage,
         } = this.state;
         const newPassword = event.target.value.trim();
-        const newPasswordError = !isPassword(newPassword);
-        const newPasswordScore = !newPasswordError
+        const newPasswordError = isPassword(newPassword);
+        const newPasswordScore = !newPasswordError.errorStatus
           ? zxcvbn(newPassword).score
           : -1;
-        const newPasswordStrength = !newPasswordError
+        const newPasswordStrength = !newPasswordError.errorStatus
           ? [
               <Translate key={1} text="Too Insecure" />,
               <Translate key={2} text="Bad" />,
@@ -85,8 +84,8 @@ class ResetPassword extends Component {
 
         this.setState({
           newPassword,
-          newPasswordErrorMessage: newPasswordError ? (
-            <Translate text="Atleast 8 characters, 1 special character, number, 1 capital letter" />
+          newPasswordErrorMessage: newPasswordError.errorStatus ? (
+            <Translate text={newPasswordError.message} />
           ) : (
             ''
           ),
@@ -127,26 +126,28 @@ class ResetPassword extends Component {
     }
   };
 
-  handleSubmit = () => {
+  handleSubmit = async () => {
     const { actions } = this.props;
     const { newPassword } = this.state;
     this.setState({ loading: true });
-    resetPassword({ token: this.token, newpass: newPassword })
-      .then(({ message }) => {
-        actions.openSnackBar({
-          snackBarMessage: message,
-          snackBarDuration: 4000,
-        });
-        actions.openModal({ modalType: 'login' });
-        this.setState({ loading: false });
-      })
-      .catch(error => {
-        actions.openSnackBar({
-          snackBarMessage: `Failed ${error.message}`,
-          snackBarDuration: 4000,
-        });
-        this.setState({ loading: false });
+    try {
+      let message = await resetPassword({
+        token: this.token,
+        newpass: newPassword,
       });
+      actions.openSnackBar({
+        snackBarMessage: message,
+        snackBarDuration: 4000,
+      });
+      actions.openModal({ modalType: 'login' });
+      this.setState({ loading: false });
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: `Failed ${error.message}`,
+        snackBarDuration: 4000,
+      });
+      this.setState({ loading: false });
+    }
   };
 
   render() {
@@ -173,7 +174,10 @@ class ResetPassword extends Component {
         </DialogTitle>
         <DialogContent>
           <form autoComplete="false">
-            <FormControl error={newPasswordErrorMessage !== ''}>
+            <FormControl
+              error={newPasswordErrorMessage !== ''}
+              disabled={loading}
+            >
               <PasswordField
                 name="newPassword"
                 value={newPassword}
@@ -189,7 +193,10 @@ class ResetPassword extends Component {
               <PasswordStrengthBar score={newPasswordScore} />
               <span>{newPasswordStrength}</span>
             </div>
-            <FormControl error={newPasswordConfirmErrorMessage !== ''}>
+            <FormControl
+              error={newPasswordConfirmErrorMessage !== ''}
+              disabled={loading}
+            >
               <PasswordField
                 name="confirmNewPassword"
                 value={confirmNewPassword}

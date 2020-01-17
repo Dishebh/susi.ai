@@ -13,7 +13,7 @@ const ColorBox = styled.span`
   cursor: pointer;
   margin-right: 0.625rem;
   margin-bottom: -0.5rem;
-  background-color: ${props => props.backgroundColor};
+  background-color: ${props => props.$backgroundColor};
 `;
 
 const ColorPickerContainer = styled.div`
@@ -33,14 +33,14 @@ const ColorPickerComponent = props => {
   return (
     <div>
       <ColorBox
-        backgroundColor={backgroundColor}
+        $backgroundColor={backgroundColor}
         onClick={() => handleClickColorBox(id)}
       />
       <ColorPickerContainer>
         <ColorPicker
           name="color"
           id={'colorPicker' + id}
-          defaultValue={backgroundColor}
+          value={backgroundColor}
           onChange={color => handleChangeColor(component, color)}
         />
       </ColorPickerContainer>

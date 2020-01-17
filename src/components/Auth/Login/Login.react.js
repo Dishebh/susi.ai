@@ -1,4 +1,3 @@
-// Packages
 import React, { Component } from 'react';
 import Cookies from 'universal-cookie';
 import PropTypes from 'prop-types';
@@ -17,6 +16,7 @@ import CloseButton from '../../shared/CloseButton';
 import Translate from '../../Translate/Translate.react';
 import { cookieDomain } from '../../../utils/helperFunctions';
 import { isEmail } from '../../../utils';
+import storageService from '../../../utils/storageService';
 import { createMessagePairArray } from '../../../utils/formatMessage';
 import Recaptcha from '../../shared/Recaptcha';
 import {
@@ -40,6 +40,7 @@ class Login extends Component {
     serverUrl: PropTypes.string,
     captchaKey: PropTypes.string,
     isCaptchaEnabled: PropTypes.bool,
+    message: PropTypes.string,
   };
 
   constructor(props) {
@@ -52,13 +53,14 @@ class Login extends Component {
       success: false,
       loading: false,
       showCaptchaErrorMessage: false,
-      attempts: sessionStorage.getItem('loginAttempts') || 0,
+      attempts: storageService.get('loginAttempts', 'session') || 0,
       captchaResponse: '',
+      errorMessage: '',
     };
   }
 
   componentWillUnmount() {
-    sessionStorage.setItem('loginAttempts', this.state.attempts);
+    storageService.set('loginAttempts', this.state.attempts, 'session');
   }
 
   handleDialogClose = () => {
@@ -74,79 +76,82 @@ class Login extends Component {
     actions.closeModal();
   };
 
-  handleSubmit = e => {
+  handleSubmit = async e => {
     const { actions, location, history } = this.props;
-    const { password, email, captchaResponse } = this.state;
-
+    let { password, email, captchaResponse } = this.state;
+    email = email.toLowerCase();
     if (!email || !password) {
       return;
     }
     if (isEmail(email)) {
       this.setState({ loading: true });
-      actions
-        .getLogin({
+      try {
+        let { payload } = await actions.getLogin({
           email,
           password: encodeURIComponent(password),
           captchaResponse,
-        })
-        .then(({ payload }) => {
-          let snackBarMessage;
-          const { accessToken, time, uuid } = payload;
-          if (payload.accepted) {
-            snackBarMessage = payload.message;
-            actions
-              // eslint-disable-next-line camelcase
-              .getAdmin({ access_token: payload.accessToken })
-              .then(({ payload }) => {
-                this.setCookies({ accessToken, time, uuid, email });
-                if (location.pathname !== '/chat') {
-                  history.push('/');
-                } else {
-                  actions.getHistoryFromServer().then(({ payload }) => {
-                    // eslint-disable-next-line
-                    createMessagePairArray(payload).then(messagePairArray => {
-                      actions.initializeMessageStore(messagePairArray);
-                    });
-                  });
-                  this.setState({
-                    success: true,
-                    loading: false,
-                  });
-                }
-              })
-              .catch(error => {
-                actions.initializeMessageStoreFailed();
-                console.log(error);
+        });
+
+        let snackBarMessage;
+        const { accessToken, time, uuid } = payload;
+        if (payload.accepted) {
+          snackBarMessage = payload.message;
+          try {
+            /*eslint-disable */
+            await actions.getAdmin({
+              access_token: accessToken,
+            });
+            /* eslint-enable */
+            this.setCookies({ accessToken, time, uuid, email });
+            if (location.pathname !== '/chat') {
+              history.push('/');
+            } else {
+              let { payload } = await actions.getHistoryFromServer();
+              // eslint-disable-next-line
+              let messagePairArray = await createMessagePairArray(payload);
+              actions.initializeMessageStore(messagePairArray);
+              this.setState({
+                success: true,
+                loading: false,
               });
-            this.handleDialogClose();
-          } else {
-            snackBarMessage = 'Login Failed. Try Again';
-            this.setState(prevState => ({
-              password: '',
-              success: false,
-              loading: false,
-              attempts: prevState.attempts + 1,
-            }));
+            }
+          } catch (error) {
+            actions.initializeMessageStoreFailed();
+            console.log(error);
           }
-          actions.openSnackBar({ snackBarMessage });
-        })
-        .catch(error => {
-          console.log(error);
+          this.handleDialogClose();
+        } else {
+          snackBarMessage = 'Login Failed. Try Again';
           this.setState(prevState => ({
             password: '',
             success: false,
             loading: false,
             attempts: prevState.attempts + 1,
+            errorMessage: 'Email or password entered is incorrect',
           }));
-          actions.openSnackBar({
-            snackBarMessage: 'Login Failed. Try Again',
-          });
+        }
+        actions.openSnackBar({ snackBarMessage });
+      } catch (error) {
+        console.log(error);
+        this.setState(prevState => ({
+          password: '',
+          success: false,
+          loading: false,
+          attempts: prevState.attempts + 1,
+          errorMessage: 'Email or password entered is incorrect',
+        }));
+        actions.openSnackBar({
+          snackBarMessage: 'Login Failed. Try Again',
         });
+      }
     }
   };
 
   // Handle changes in email and password
   handleTextFieldChange = event => {
+    this.setState({
+      errorMessage: '',
+    });
     switch (event.target.name) {
       case 'email': {
         const email = event.target.value.trim();
@@ -161,9 +166,6 @@ class Login extends Component {
       case 'password': {
         const password = event.target.value.trim();
         let passwordErrorMessage = '';
-        if (!password || password.length < 6) {
-          passwordErrorMessage = 'Password should be atleast 6 characters';
-        }
         this.setState({
           password,
           passwordErrorMessage,
@@ -230,8 +232,9 @@ class Login extends Component {
       showCaptchaErrorMessage,
       attempts,
       isCaptchaEnabled,
+      errorMessage,
     } = this.state;
-    const { actions, captchaKey } = this.props;
+    const { actions, captchaKey, message } = this.props;
     const isValid =
       email &&
       !emailErrorMessage &&
@@ -250,7 +253,7 @@ class Login extends Component {
           <CloseButton onClick={this.handleDialogClose} />
         </DialogTitle>
         <DialogContent>
-          <FormControl error={emailErrorMessage !== ''}>
+          <FormControl error={emailErrorMessage !== ''} disabled={loading}>
             <OutlinedInput
               labelWidth={0}
               name="email"
@@ -266,7 +269,7 @@ class Login extends Component {
             </FormHelperText>
           </FormControl>
 
-          <FormControl error={passwordErrorMessage !== ''}>
+          <FormControl error={passwordErrorMessage !== ''} disabled={loading}>
             <PasswordField
               name="password"
               value={password}
@@ -278,6 +281,7 @@ class Login extends Component {
               {passwordErrorMessage}
             </FormHelperText>
           </FormControl>
+          {errorMessage && <div style={{ color: 'red' }}>{errorMessage}</div>}
           {captchaKey && isCaptchaEnabled && attempts > 0 && (
             <Recaptcha
               captchaKey={captchaKey}
@@ -286,6 +290,7 @@ class Login extends Component {
               error={showCaptchaErrorMessage}
             />
           )}
+          {message && <div style={{ color: '#388e3c' }}>{message}</div>}
           <Button
             onClick={this.handleSubmit}
             variant="contained"

@@ -1,5 +1,5 @@
 import React from 'react';
-import Button from '@material-ui/core/Button';
+import Button from '../../shared/Button';
 import _Stepper from '@material-ui/core/Stepper';
 import Step from '@material-ui/core/Step';
 import StepButton from '@material-ui/core/StepButton';
@@ -116,6 +116,14 @@ const DraftButtonContainer = styled.div`
   }
 `;
 
+const NextButton = styled(Button)`
+  margin-left: 10px;
+  @media (max-width: 480px) {
+    margin-left: 0px;
+    margin-bottom: 10px;
+  }
+`;
+
 const ActionButtonContainer = styled.div`
   float: right;
   display: flex;
@@ -140,7 +148,7 @@ const ActionPaper = styled(Paper)`
 `;
 
 class BotWizard extends React.Component {
-  componentDidMount() {
+  async componentDidMount() {
     const { actions } = this.props;
     if (
       getQueryStringValue('template') ||
@@ -154,16 +162,14 @@ class BotWizard extends React.Component {
           if (template.id === getQueryStringValue('template')) {
             let { code } = template;
             // Update code
-            actions
-              .setSkillCode({ code })
-              .then(() => {
-                this.setState({
-                  loaded: true,
-                });
-              })
-              .catch(error => {
-                console.log(error);
+            try {
+              await actions.setSkillCode({ code });
+              this.setState({
+                loaded: true,
               });
+            } catch (error) {
+              console.log(error);
+            }
           }
         }
       } else if (getQueryStringValue('draftID')) {
@@ -214,7 +220,7 @@ class BotWizard extends React.Component {
     actions.resetCreateStore();
   }
 
-  saveDraft = () => {
+  saveDraft = async () => {
     const {
       actions,
       category,
@@ -239,19 +245,18 @@ class BotWizard extends React.Component {
     };
     let object = JSON.stringify(skillData);
     if (skillData.category !== null) {
-      storeDraft({ object })
-        .then(payload => {
-          actions.openSnackBar({
-            snackBarMessage: 'Successfully saved draft of your chatbot.',
-            snackBarDuration: 2000,
-          });
-        })
-        .catch(error => {
-          actions.openSnackBar({
-            snackBarMessage: "Couldn't save the draft. Please try again.",
-            snackBarDuration: 2000,
-          });
+      try {
+        await storeDraft({ object });
+        actions.openSnackBar({
+          snackBarMessage: 'Successfully saved draft of your chatbot.',
+          snackBarDuration: 2000,
         });
+      } catch (error) {
+        actions.openSnackBar({
+          snackBarMessage: "Couldn't save the draft. Please try again.",
+          snackBarDuration: 2000,
+        });
+      }
     } else {
       actions.openSnackBar({
         snackBarMessage: "Couldn't save the draft. Please select the Category",
@@ -260,54 +265,66 @@ class BotWizard extends React.Component {
     }
   };
 
-  getDraftBotDetails = id => {
+  getDraftBotDetails = async id => {
     const { actions } = this.props;
-    readDraft({ id })
-      .then(payload => {})
-      .catch(error => {
-        actions.openSnackBar({
-          snackBarMessage: "Couldn't get your drafts. Please reload the page.",
-          snackBarDuration: 2000,
-        });
+    try {
+      await readDraft({ id });
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: "Couldn't get your drafts. Please reload the page.",
+        snackBarDuration: 2000,
       });
+    }
   };
 
-  getBotDetails = (name, group, language) => {
+  getBotDetails = async (name, group, language) => {
     const { actions, imageUrl } = this.props;
-    actions
-      .getBotDetails({ group, language, skill: name, model: 'general' })
-      .then(payload => {
-        let savedSkillOld = {
-          OldGroup: group,
-          OldLanguage: language,
-          OldSkill: name,
-          oldImageName: imageUrl.replace('images/', ''),
-        };
-        this.setState({
-          loaded: true,
-          savedSkillOld,
-          updateSkillNow: true,
-        });
-      })
-      .catch(error => {
-        this.setState({
-          loaded: true,
-        });
-        actions.openSnackBar({
-          snackBarMessage: "Error! Couldn't fetch skill",
-          snackBarDuration: 2000,
-        });
+    try {
+      await actions.getBotDetails({
+        group,
+        language,
+        skill: name,
+        model: 'general',
       });
+      let savedSkillOld = {
+        OldGroup: group,
+        OldLanguage: language,
+        OldSkill: name,
+        oldImageName: imageUrl.replace('images/', ''),
+      };
+      this.setState({
+        loaded: true,
+        savedSkillOld,
+        updateSkillNow: true,
+      });
+    } catch (error) {
+      this.setState({
+        loaded: true,
+      });
+      actions.openSnackBar({
+        snackBarMessage: "Error! Couldn't fetch skill",
+        snackBarDuration: 2000,
+      });
+    }
   };
 
   handleNext = () => {
     const { stepIndex } = this.state;
     const { name } = this.props;
-    this.setState({
-      stepIndex: stepIndex + 1,
-      finished: stepIndex >= 3,
-      commitMessage: 'Created Bot ' + name,
-    });
+    const botName = name.trim();
+    if (botName === '') {
+      this.props.actions.openSnackBar({
+        snackBarMessage: 'Please do not leave name field empty',
+        snackBarPosition: { vertical: 'top', horizontal: 'right' },
+        variant: 'warning',
+      });
+    } else {
+      this.setState({
+        stepIndex: stepIndex + 1,
+        finished: stepIndex >= 3,
+        commitMessage: 'Created Bot ' + name,
+      });
+    }
   };
 
   handlePrev = () => {
@@ -367,7 +384,7 @@ class BotWizard extends React.Component {
     });
   };
 
-  saveClick = () => {
+  saveClick = async () => {
     // save the skill on the server
     const {
       email,
@@ -475,51 +492,52 @@ class BotWizard extends React.Component {
     form.append('content', buildCode);
     form.append('access_token', accessToken);
     form.append('private', '1');
-
-    updateSkill(form, updateSkillNow ? 'modifySkill.json' : 'createSkill.json')
-      .then(data => {
-        if (data.accepted === true) {
-          let savedSkillOld = {
-            OldGroup: category,
-            OldLanguage: language,
-            OldSkill: name.trim().replace(/\s/g, '_'),
-            oldImageName: imageUrl.replace('images/', ''),
-          };
-          this.setState(
-            {
-              savingSkill: false,
-              savedSkillOld,
-              updateSkillNow: true,
-              imageChanged: false,
-            },
-            () => this.handleNext(),
-          );
-          this.props.actions.openSnackBar({
-            snackBarMessage: 'Your Bot has been saved',
-            snackBarPosition: { vertical: 'top', horizontal: 'right' },
-            variant: 'success',
-          });
-        } else {
-          this.setState({
+    try {
+      let data = await updateSkill(
+        form,
+        updateSkillNow ? 'modifySkill.json' : 'createSkill.json',
+      );
+      if (data.accepted === true) {
+        let savedSkillOld = {
+          OldGroup: category,
+          OldLanguage: language,
+          OldSkill: name.trim().replace(/\s/g, '_'),
+          oldImageName: imageUrl.replace('images/', ''),
+        };
+        this.setState(
+          {
             savingSkill: false,
-          });
-          this.props.actions.openSnackBar({
-            snackBarMessage: String(data.message),
-            snackBarPosition: { vertical: 'top', horizontal: 'right' },
-            variant: 'error',
-          });
-        }
-      })
-      .catch(error => {
+            savedSkillOld,
+            updateSkillNow: true,
+            imageChanged: false,
+          },
+          () => this.handleNext(),
+        );
+        this.props.actions.openSnackBar({
+          snackBarMessage: 'Your Bot has been saved',
+          snackBarPosition: { vertical: 'top', horizontal: 'right' },
+          variant: 'success',
+        });
+      } else {
         this.setState({
           savingSkill: false,
         });
         this.props.actions.openSnackBar({
-          snackBarMessage: String(error),
+          snackBarMessage: String(data.message),
           snackBarPosition: { vertical: 'top', horizontal: 'right' },
           variant: 'error',
         });
+      }
+    } catch (error) {
+      this.setState({
+        savingSkill: false,
       });
+      this.props.actions.openSnackBar({
+        snackBarMessage: String(error),
+        snackBarPosition: { vertical: 'top', horizontal: 'right' },
+        variant: 'error',
+      });
+    }
   };
 
   check = () => {
@@ -621,13 +639,12 @@ class BotWizard extends React.Component {
                           ) : null}
                           <ActionButtonContainer>
                             {stepIndex === 2 ? (
-                              <Button
+                              <NextButton
                                 variant="contained"
                                 color="primary"
                                 onClick={this.saveClick}
                                 style={{
                                   minWidth: '11rem',
-                                  marginLeft: '10px',
                                 }}
                               >
                                 {// eslint-disable-next-line
@@ -638,18 +655,19 @@ class BotWizard extends React.Component {
                                 ) : (
                                   'Save and Deploy'
                                 )}
-                              </Button>
+                              </NextButton>
                             ) : null}
                             {stepIndex < 2 ? (
-                              <Button
+                              <NextButton
                                 variant="contained"
                                 color="primary"
                                 onClick={this.handleNext}
-                                style={{ marginLeft: '10px' }}
                               >
                                 Next
-                              </Button>
+                              </NextButton>
                             ) : null}
+                          </ActionButtonContainer>
+                          <ActionButtonContainer>
                             {stepIndex !== 0 && stepIndex !== 3 ? (
                               <Button
                                 variant="contained"
@@ -659,6 +677,8 @@ class BotWizard extends React.Component {
                                 Back
                               </Button>
                             ) : null}
+                          </ActionButtonContainer>
+                          <ActionButtonContainer>
                             {stepIndex === 0 ? (
                               <Link to="/mybots">
                                 <Button variant="contained" color="primary">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { connect } from 'react-redux';
-import Button from '@material-ui/core/Button';
+import Button from '../shared/Button';
 import Translate from '../Translate/Translate.react';
 import settingActions from '../../redux/actions/settings';
 import SettingsTabWrapper from './SettingsTabWrapper';
@@ -44,7 +44,7 @@ class MicrophoneTab extends React.Component {
     });
   };
 
-  handleSubmit = () => {
+  handleSubmit = async () => {
     const { actions, userEmailId } = this.props;
     const { micInput } = this.state;
     this.setState({ loading: true });
@@ -52,26 +52,25 @@ class MicrophoneTab extends React.Component {
       micInput,
     };
     payload = userEmailId !== '' ? { ...payload, email: userEmailId } : payload;
-    setUserSettings(payload)
-      .then(data => {
-        if (data.accepted) {
-          actions.openSnackBar({
-            snackBarMessage: 'Settings updated',
-          });
-          actions.setUserSettings({ micInput });
-          this.setState({ loading: false });
-        } else {
-          actions.openSnackBar({
-            snackBarMessage: 'Failed to save Settings',
-          });
-          this.setState({ loading: false });
-        }
-      })
-      .catch(error => {
+    try {
+      let data = await setUserSettings(payload);
+      if (data.accepted) {
+        actions.openSnackBar({
+          snackBarMessage: 'Settings updated',
+        });
+        actions.setUserSettings({ micInput });
+        this.setState({ loading: false });
+      } else {
         actions.openSnackBar({
           snackBarMessage: 'Failed to save Settings',
         });
+        this.setState({ loading: false });
+      }
+    } catch (error) {
+      actions.openSnackBar({
+        snackBarMessage: 'Failed to save Settings',
       });
+    }
   };
 
   render() {
@@ -98,7 +97,7 @@ class MicrophoneTab extends React.Component {
           color="primary"
           onClick={this.handleSubmit}
           disabled={disabled}
-          style={{ margin: '1.5rem 0', width: '10rem' }}
+          style={{ margin: '1.5rem 0' }}
         >
           {loading ? (
             <CircularProgress size={24} />
